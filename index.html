@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>University Email Scraper</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #5a6fd8, #6a4190);
+        }
+        .hero-section {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .hero-title {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            color: white;
+        }
+        .hero-subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            color: white;
+        }
+        .form-control:focus {
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            border-color: #667eea;
+        }
+        .loading-spinner {
+            display: none;
+        }
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        .results-section {
+            display: none;
+            margin-top: 2rem;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .email-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .table th {
+            background: #f8f9fa;
+            border: none;
+            color: #495057;
+        }
+        .copy-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <!-- Hero Section -->
+        <div class="hero-section">
+            <h1 class="hero-title">
+                <i class="fas fa-university me-3"></i>
+                University Email Scraper
+            </h1>
+            <p class="hero-subtitle">
+                Extract email addresses and names from university webpages
+            </p>
+        </div>
+
+        <!-- Input Form -->
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body p-4">
+                        <form id="scrapeForm">
+                            <div class="mb-3">
+                                <label for="url" class="form-label">
+                                    <i class="fas fa-link me-2"></i>University Webpage URL
+                                </label>
+                                <input type="url" class="form-control form-control-lg" id="url" 
+                                       placeholder="https://university.edu/faculty" required>
+                                <div class="form-text">
+                                    Enter the URL of a university faculty or staff page
+                                </div>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <span class="loading-spinner">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>
+                                        Scraping...
+                                    </span>
+                                    <span class="normal-text">
+                                        <i class="fas fa-search me-2"></i>
+                                        Extract Emails
+                                    </span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section (appears directly below input form) -->
+        <div class="row justify-content-center" id="resultsSection" style="display: none;">
+            <div class="col-md-10">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-envelope me-2"></i>
+                            Extracted Emails (<span id="emailCount">0</span>)
+                        </h5>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" 
+                                    data-bs-toggle="dropdown">
+                                <i class="fas fa-copy me-1"></i>Copy
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="copyAllEmails()">
+                                    <i class="fas fa-envelope me-2"></i>All Emails
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="copyAllNames()">
+                                    <i class="fas fa-user me-2"></i>All Names
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" onclick="copyAllResults()">
+                                    <i class="fas fa-copy me-2"></i>All Email-Name Pairs
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" onclick="copyAsGrid()">
+                                    <i class="fas fa-table me-2"></i>Copy as Grid (for Excel)
+                                </a></li>
+                            </ul>
+                        </div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline-success btn-sm dropdown-toggle" 
+                                    data-bs-toggle="dropdown">
+                                <i class="fas fa-download me-1"></i>Download
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="downloadEmails()">
+                                    <i class="fas fa-envelope me-2"></i>Emails Only
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadNames()">
+                                    <i class="fas fa-user me-2"></i>Names Only
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadResults()">
+                                    <i class="fas fa-download me-2"></i>Complete CSV
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadGrid()">
+                                    <i class="fas fa-table me-2"></i>Grid Format (Excel)
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0" id="resultsTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 50%">Email</th>
+                                        <th style="width: 40%">Name</th>
+                                        <th style="width: 10%">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="resultsBody">
+                                    <!-- Results will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        let scrapedResults = [];
+
+        // Function to clear previous results
+        function clearResults() {
+            scrapedResults = [];
+            document.getElementById('resultsBody').innerHTML = '';
+            document.getElementById('emailCount').textContent = '0';
+            document.getElementById('resultsSection').style.display = 'none';
+        }
+
+        // Form submission handler
+        document.getElementById('scrapeForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const url = document.getElementById('url').value;
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const loadingSpinner = submitBtn.querySelector('.loading-spinner');
+            const normalText = submitBtn.querySelector('.normal-text');
+            
+            // Clear previous results immediately
+            clearResults();
+            
+            // Show loading state
+            loadingSpinner.style.display = 'inline';
+            normalText.style.display = 'none';
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    scrapedResults = data.results;
+                    displayResults(data.results);
+                    showToast('Success! Found ' + data.results.length + ' email addresses', 'success');
+                } else {
+                    showToast('Error: ' + data.error, 'danger');
+                }
+            } catch (error) {
+                showToast('Network error: ' + error.message, 'danger');
+            } finally {
+                // Reset button state
+                loadingSpinner.style.display = 'none';
+                normalText.style.display = 'inline';
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Display results in table
+        function displayResults(results) {
+            const tbody = document.getElementById('resultsBody');
+            const emailCount = document.getElementById('emailCount');
+            const resultsSection = document.getElementById('resultsSection');
+            
+            // Clear and populate results
+            tbody.innerHTML = '';
+            emailCount.textContent = results.length;
+            
+            results.forEach((result, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-envelope text-muted me-2"></i>
+                            <span class="email-text">${result.email}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <i class="fas ${result.name === 'unknown' ? 'fa-question-circle text-muted' : 'fa-user text-primary'} me-2"></i>
+                            <span class="name-text ${result.name === 'unknown' ? 'text-muted fst-italic' : ''}">${result.name}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary copy-btn" onclick="copyEmail('${result.email}')" title="Copy email">
+                                <i class="fas fa-envelope"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary copy-btn" onclick="copyName('${result.name}')" title="Copy name">
+                                <i class="fas fa-user"></i>
+                            </button>
+                            <button class="btn btn-outline-success copy-btn" onclick="copyBoth('${result.email}', '${result.name}')" title="Copy both">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Show results section with smooth transition
+            resultsSection.style.display = 'block';
+            
+            // Smooth scroll to results section
+            setTimeout(() => {
+                resultsSection.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start' 
+                });
+            }, 100);
+        }
+
+        // Copy functions
+        function copyEmail(email) {
+            navigator.clipboard.writeText(email).then(() => {
+                showToast('Email copied: ' + email, 'info');
+            });
+        }
+
+        function copyName(name) {
+            if (name !== 'unknown') {
+                navigator.clipboard.writeText(name).then(() => {
+                    showToast('Name copied: ' + name, 'info');
+                });
+            } else {
+                showToast('No name to copy', 'warning');
+            }
+        }
+
+        function copyBoth(email, name) {
+            const text = name !== 'unknown' ? `${email} - ${name}` : email;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Copied: ' + text, 'info');
+            });
+        }
+
+        function copyAllEmails() {
+            const emails = scrapedResults.map(r => r.email).join('\n');
+            navigator.clipboard.writeText(emails).then(() => {
+                showToast(`Copied ${scrapedResults.length} emails to clipboard`, 'success');
+            });
+        }
+
+        function copyAllNames() {
+            const names = scrapedResults.filter(r => r.name !== 'unknown').map(r => r.name);
+            const text = names.join('\n');
+            navigator.clipboard.writeText(text).then(() => {
+                showToast(`Copied ${names.length} names to clipboard`, 'success');
+            });
+        }
+
+        function copyAllResults() {
+            const results = scrapedResults.map(r => 
+                r.name !== 'unknown' ? `${r.email} - ${r.name}` : r.email
+            ).join('\n');
+            navigator.clipboard.writeText(results).then(() => {
+                showToast('All email-name pairs copied to clipboard', 'success');
+            });
+        }
+
+        function copyAsGrid() {
+            let gridContent = 'Email\tName\n';
+            scrapedResults.forEach(r => {
+                gridContent += `${r.email}\t${r.name}\n`;
+            });
+            navigator.clipboard.writeText(gridContent).then(() => {
+                showToast('Grid format copied! Paste directly into Excel or Google Sheets', 'success');
+            });
+        }
+
+        // Download functions
+        function downloadEmails() {
+            const emailContent = scrapedResults.map(r => r.email).join('\n');
+            downloadFile(emailContent, 'university_emails.txt', 'text/plain');
+        }
+
+        function downloadNames() {
+            const nameContent = scrapedResults.filter(r => r.name !== 'unknown').map(r => r.name).join('\n');
+            downloadFile(nameContent, 'university_names.txt', 'text/plain');
+        }
+
+        function downloadResults() {
+            const csvContent = "Email,Name\n" + 
+                scrapedResults.map(r => `"${r.email}","${r.name}"`).join('\n');
+            downloadFile(csvContent, 'university_emails.csv', 'text/csv');
+        }
+
+        function downloadGrid() {
+            let gridContent = 'Email\tName\n';
+            scrapedResults.forEach(r => {
+                gridContent += `${r.email}\t${r.name}\n`;
+            });
+            downloadFile(gridContent, 'university_emails_grid.txt', 'text/plain');
+        }
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType + ';charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Toast notification system
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toastContainer');
+            const toastId = 'toast-' + Date.now();
+            
+            const toastHTML = `
+                <div class="toast" id="${toastId}" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="toast-header">
+                        <i class="fas fa-info-circle text-${type} me-2"></i>
+                        <strong class="me-auto">University Email Scraper</strong>
+                        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                    </div>
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+            
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { delay: 4000 });
+            toast.show();
+            
+            // Remove toast element after it's hidden
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                toastElement.remove();
+            });
+        }
+    </script>
+</body>
+</html>
