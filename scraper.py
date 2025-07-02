@@ -279,6 +279,40 @@ class UniversityEmailScraper:
         
         return results
     
+    def generate_name_from_email(self, email: str) -> str:
+        """
+        Generate a name from email address using specific logic:
+        1. Extract username part (before @)
+        2. If email contains "." before @, format as "First Last" 
+        3. If no ".", format as "F. Username"
+        
+        Args:
+            email: Email address to process
+            
+        Returns:
+            Generated name string
+        """
+        try:
+            # Extract username part before @
+            username = email.split('@')[0]
+            
+            # Check if username contains a dot
+            if '.' in username:
+                # Split on dot and capitalize each part
+                parts = username.split('.')
+                # Join with space, capitalizing first letter of each part
+                name = ' '.join(part.capitalize() for part in parts if part)
+                return name
+            else:
+                # No dot - format as "F. Username"
+                if len(username) > 0:
+                    return f"{username[0].upper()}. {username[1:].capitalize()}"
+                return username.capitalize()
+                
+        except Exception:
+            # Fallback to original username if anything goes wrong
+            return email.split('@')[0] if '@' in email else email
+
     def extract_name_from_text(self, text: str) -> Optional[str]:
         """
         Extract a person's name from a text string using pattern matching.
@@ -425,9 +459,23 @@ class UniversityEmailScraper:
                 email_lower = email.lower()
                 if email_lower not in seen_emails:
                     seen_emails.add(email_lower)
+                    
+                    # Apply the new name generation logic
+                    final_name = name
+                    if not name or name == "unknown":
+                        # No name found, generate from email
+                        final_name = self.generate_name_from_email(email)
+                    else:
+                        # Check if last 2 characters of name match last 2 characters of username
+                        username = email.split('@')[0] if '@' in email else email
+                        if len(name) >= 2 and len(username) >= 2:
+                            if name[-2:].lower() != username[-2:].lower():
+                                # Last 2 characters don't match, use email-based name
+                                final_name = self.generate_name_from_email(email)
+                    
                     unique_results.append({
                         'email': email,
-                        'name': name if name and name != "unknown" else "unknown"
+                        'name': final_name
                     })
             
             logging.info(f"Successfully extracted {len(unique_results)} unique email-name pairs from {url}")
