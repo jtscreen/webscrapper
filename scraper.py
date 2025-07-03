@@ -279,6 +279,146 @@ class UniversityEmailScraper:
         
         return results
     
+    def extract_name_from_section(self, soup: BeautifulSoup, email: str) -> Optional[str]:
+        """
+        Extract name from a section by finding the email first, then searching for h tags
+        in div containers, comparing last two characters.
+        
+        Args:
+            soup: BeautifulSoup object of the webpage
+            email: Email address to search for in sections
+            
+        Returns:
+            Extracted name from h tag or None if not found
+        """
+        try:
+            # Extract username from email (part before @)
+            username = email.split('@')[0] if '@' in email else email
+            username_last2 = username[-2:].lower() if len(username) >= 2 else username.lower()
+            
+            logging.debug(f"Searching for h tags for email: {email}, username: {username}, last2: {username_last2}")
+            
+            # First, find all elements that contain the email address
+            email_elements = []
+            
+            # Search in text content
+            for element in soup.find_all(text=True):
+                if email.lower() in element.lower():
+                    email_elements.append(element.parent if element.parent else element)
+            
+            # Search in href attributes (mailto links)
+            for link in soup.find_all('a', href=True):
+                if email.lower() in link['href'].lower():
+                    email_elements.append(link)
+            
+            # Search in other attributes that might contain emails
+            for element in soup.find_all():
+                element_str = str(element)
+                if email.lower() in element_str.lower():
+                    email_elements.append(element)
+            
+            logging.debug(f"Found {len(email_elements)} elements containing email {email}")
+            
+            # For each element containing the email, traverse up parent divs
+            for email_element in email_elements:
+                current_div = email_element
+                
+                # Find the nearest parent div
+                while current_div and (not hasattr(current_div, 'name') or current_div.name != 'div'):
+                    current_div = current_div.parent if hasattr(current_div, 'parent') else None
+                
+                # Now start the loop through div containers
+                for level in range(10):  # Maximum 10 levels up
+                    if not current_div or not hasattr(current_div, 'name') or current_div.name != 'div':
+                        break
+                    
+                    logging.debug(f"Level {level}: Searching in div container")
+                    
+                    # Search for h tags (h1-h6) in current div container
+                    heading_tags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+                    h_tag_found = False
+                    
+                    for tag in heading_tags:
+                        headings = current_div.find_all(tag) if hasattr(current_div, 'find_all') else []
+                        for heading in headings:
+                            h_tag_found = True
+                            heading_text = heading.get_text(strip=True)
+                            
+                            if heading_text and len(heading_text) >= 2:
+                                heading_last2 = heading_text[-2:].lower()
+                                
+                                logging.debug(f"Found {tag}: '{heading_text}', last2: '{heading_last2}' vs username last2: '{username_last2}'")
+                                
+                                # Compare last 2 characters
+                                if heading_last2 == username_last2:
+                                    logging.debug(f"✅ H tag last 2 chars match! Using: {heading_text}")
+                                    return heading_text
+                                
+                                # Check first 2 characters
+                                if len(heading_text) >= 2 and len(username) >= 2:
+                                    heading_first2 = heading_text[:2].lower()
+                                    username_first2 = username[:2].lower()
+                                    logging.debug(f"🔤 Checking first 2 chars: '{heading_first2}' vs '{username_first2}'")
+                                    
+                                    if heading_first2 == username_first2:
+                                        logging.debug(f"✅ H tag first 2 chars match! Using: {heading_text}")
+                                        return heading_text
+                                
+                                # Both last 2 and first 2 don't match
+                                logging.debug(f"❌ Both first and last 2 chars don't match for: {heading_text}")
+                    
+                    # If we found h tags but none matched, go to parent div
+                    if h_tag_found:
+                        logging.debug(f"Found h tags at level {level} but none matched, going to parent div")
+                    else:
+                        logging.debug(f"No h tags found at level {level}, going to parent div")
+                    
+                    # Move to parent div container
+                    parent = current_div.parent if hasattr(current_div, 'parent') else None
+                    while parent and (not hasattr(parent, 'name') or parent.name != 'div'):
+                        parent = parent.parent if hasattr(parent, 'parent') else None
+                    
+                    current_div = parent
+            
+            logging.debug(f"No matching h tags found for email {email}")
+            return None
+            
+        except Exception as e:
+            logging.error(f"Error extracting name from section for {email}: {e}")
+            return None
+
+    def format_name_with_comma(self, name: str) -> str:
+        """
+        Format a name that contains a comma by moving everything after the comma
+        to the front, handling spacing properly.
+        
+        Args:
+            name: Name string that may contain a comma
+            
+        Returns:
+            Formatted name string
+        """
+        if ',' not in name:
+            return name
+            
+        try:
+            # Split on comma
+            parts = name.split(',', 1)  # Split only on first comma
+            before_comma = parts[0].strip()
+            after_comma = parts[1].strip()
+            
+            # Add space after the characters we move to the front
+            result = after_comma + ' ' + before_comma
+            
+            # Check for double spaces and replace with single space
+            result = result.replace('  ', ' ')
+            
+            return result.strip()
+            
+        except Exception:
+            # Fallback to original name if anything goes wrong
+            return name
+
     def generate_name_from_email(self, email: str) -> str:
         """
         Generate a name from email address using specific logic:
@@ -460,18 +600,83 @@ class UniversityEmailScraper:
                 if email_lower not in seen_emails:
                     seen_emails.add(email_lower)
                     
-                    # Apply the new name generation logic
+                    # Apply the new name extraction and validation logic
                     final_name = name
-                    if not name or name == "unknown":
-                        # No name found, generate from email
-                        final_name = self.generate_name_from_email(email)
-                    else:
-                        # Check if last 2 characters of name match last 2 characters of username
+                    
+                    # First, try to extract name from section (div with image and email)
+                    section_name = self.extract_name_from_section(soup, email)
+                    logging.info(f"🔍 Processing email: {email}")
+                    logging.info(f"📧 Original extracted name: {name}")
+                    logging.info(f"🏷️ Section-based name: {section_name}")
+                    
+                    if section_name:
+                        # Found a name from section, validate it
                         username = email.split('@')[0] if '@' in email else email
-                        if len(name) >= 2 and len(username) >= 2:
-                            if name[-2:].lower() != username[-2:].lower():
-                                # Last 2 characters don't match, use email-based name
+                        logging.info(f"👤 Username from email: {username}")
+                        
+                        if len(section_name) >= 2 and len(username) >= 2:
+                            section_last2 = section_name[-2:].lower()
+                            username_last2 = username[-2:].lower()
+                            section_first2 = section_name[:2].lower()
+                            username_first2 = username[:2].lower()
+                            
+                            logging.info(f"🔤 Section name last 2 chars: '{section_last2}' vs Username last 2 chars: '{username_last2}'")
+                            logging.info(f"🔤 Section name first 2 chars: '{section_first2}' vs Username first 2 chars: '{username_first2}'")
+                            
+                            # Check if either first 2 or last 2 characters match
+                            if section_last2 == username_last2 or section_first2 == username_first2:
+                                # At least one pair matches, use the section name
+                                final_name = section_name
+                                logging.info(f"✅ At least one character pair matches! Using section name: {final_name}")
+                            else:
+                                # Both first 2 and last 2 don't match, use email-based name generation
                                 final_name = self.generate_name_from_email(email)
+                                logging.info(f"❌ Both character pairs don't match! Generated name from email: {final_name}")
+                        else:
+                            # Use section name if we can't compare (too short)
+                            final_name = section_name
+                            logging.info(f"⚠️ Can't compare (too short). Using section name: {final_name}")
+                    
+                    elif not name or name == "unknown":
+                        # No section name and no original name found, generate from email
+                        final_name = self.generate_name_from_email(email)
+                        logging.info(f"🔧 No section/original name found. Generated from email: {final_name}")
+                    
+                    else:
+                        # Have an original name but no section name, validate original name
+                        username = email.split('@')[0] if '@' in email else email
+                        logging.info(f"👤 Username from email: {username}")
+                        
+                        if len(name) >= 2 and len(username) >= 2:
+                            name_last2 = name[-2:].lower()
+                            username_last2 = username[-2:].lower()
+                            name_first2 = name[:2].lower()
+                            username_first2 = username[:2].lower()
+                            
+                            logging.info(f"🔤 Original name last 2 chars: '{name_last2}' vs Username last 2 chars: '{username_last2}'")
+                            logging.info(f"🔤 Original name first 2 chars: '{name_first2}' vs Username first 2 chars: '{username_first2}'")
+                            
+                            # Check if either first 2 or last 2 characters match
+                            if name_last2 == username_last2 or name_first2 == username_first2:
+                                # At least one pair matches, use the original name
+                                final_name = name
+                                logging.info(f"✅ At least one character pair matches! Using original name: {final_name}")
+                            else:
+                                # Both first 2 and last 2 don't match, use email-based name generation
+                                final_name = self.generate_name_from_email(email)
+                                logging.info(f"❌ Both character pairs don't match! Generated name from email: {final_name}")
+                        else:
+                            final_name = name
+                            logging.info(f"⚠️ Can't compare (too short). Using original name: {final_name}")
+                    
+                    # Apply comma formatting to final name
+                    if ',' in final_name:
+                        formatted_name = self.format_name_with_comma(final_name)
+                        logging.info(f"📝 Comma formatting: '{final_name}' -> '{formatted_name}'")
+                        final_name = formatted_name
+                    
+                    logging.info(f"🎯 Final name decision for {email}: {final_name}")
+                    logging.info("=" * 60)
                     
                     unique_results.append({
                         'email': email,
