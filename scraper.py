@@ -125,8 +125,13 @@ class UniversityEmailScraper:
             except:
                 name = None
 
-            results.append((email, name or "unknown"))
-            logging.debug(f"Found mailto email: {email} with name: {name or 'unknown'}")
+            # If we found a valid name from mailto context, use it directly
+            if name and name != "unknown":
+                results.append((email, name))
+                logging.debug(f"Found mailto email: {email} with name: {name} (using mailto context name)")
+            else:
+                results.append((email, name or "unknown"))
+                logging.debug(f"Found mailto email: {email} with name: {name or 'unknown'}")
 
         return results
 
@@ -295,10 +300,8 @@ class UniversityEmailScraper:
         try:
             # Extract username from email (part before @)
             username = email.split('@')[0] if '@' in email else email
-            username_last2 = username[-2:].lower() if len(username) >= 2 else username.lower()
-            username_first2 = username[:2].lower() if len(username) >= 2 else username.lower()
 
-            logging.debug(f"Searching for h tags for email: {email}, username: {username}, last2: {username_last2}, first2: {username_first2}")
+            logging.debug(f"Searching for h tags for email: {email}, username: {username}")
 
             # First, find all elements that contain the email address
             email_elements = []
@@ -347,34 +350,17 @@ class UniversityEmailScraper:
                             heading_text = heading.get_text(strip=True)
 
                             if heading_text and len(heading_text) >= 2:
-                                heading_last2 = heading_text[-2:].lower()
-
-                                logging.debug(f"Found {tag}: '{heading_text}', last2: '{heading_last2}' vs username last2: '{username_last2}'")
-
                                 # Format comma name right after finding h tag
                                 formatted_heading = self.format_comma_name(heading_text)
                                 logging.debug(f"📝 Formatted heading: '{heading_text}' -> '{formatted_heading}'")
 
-                                # Now use formatted name for comparison
-                                if len(formatted_heading) >= 2:
-                                    formatted_heading_last2 = formatted_heading[-2:].lower()
-                                    formatted_heading_first2 = formatted_heading[:2].lower()
-
-                                    logging.debug(f"🔤 Formatted heading last 2 chars: '{formatted_heading_last2}' vs username last2: '{username_last2}'")
-                                    logging.debug(f"🔤 Formatted heading first 2 chars: '{formatted_heading_first2}' vs username first2: '{username_first2}'")
-
-                                    # Compare last 2 characters
-                                    if formatted_heading_last2 == username_last2:
-                                        logging.debug(f"✅ H tag last 2 chars match! Using: {formatted_heading}")
-                                        return formatted_heading
-
-                                    # Check first 2 characters
-                                    if formatted_heading_first2 == username_first2:
-                                        logging.debug(f"✅ H tag first 2 chars match! Using: {formatted_heading}")
-                                        return formatted_heading
-
-                                # Both last 2 and first 2 don't match
-                                logging.debug(f"❌ Both first and last 2 chars don't match for: {formatted_heading}")
+                                # Check if email contains first name or last name
+                                name_match = self.check_name_in_email(formatted_heading, email)
+                                if name_match:
+                                    logging.debug(f"✅ Name match found! Using: {formatted_heading}")
+                                    return formatted_heading
+                                else:
+                                    logging.debug(f"❌ No name match found for: {formatted_heading}")
 
                     # If we found h tags but none matched, go to parent div
                     if h_tag_found:
@@ -500,6 +486,31 @@ class UniversityEmailScraper:
 
         return None
 
+    def check_name_in_email(self, name: str, email: str) -> bool:
+        """
+        Check if the name (first or last) is present in the email address.
+
+        Args:
+            name: The name to check for.
+            email: The email address to check within.
+
+        Returns:
+            True if the name is found in the email, False otherwise.
+        """
+        try:
+            username = email.split('@')[0].lower()  # Get username part of email
+
+            # Split the name into parts (first and last name)
+            name_parts = name.lower().split()
+
+            # Check if any part of the name is in the username
+            for part in name_parts:
+                if part in username:
+                    return True
+
+            return False  # No name part found in the email
+        except:
+            return False
 
 
     def find_name_near_element(self, element) -> Optional[str]:
@@ -622,48 +633,49 @@ class UniversityEmailScraper:
                     # Apply the new name extraction and validation logic
                     final_name = name
 
-                    # First, try to extract name from section (div with image and email)
-                    section_name = self.extract_name_from_section(soup, email)
-                    logging.info(f"🔍 Processing email: {email}")
-                    logging.info(f"📧 Original extracted name: {name}")
-                    logging.info(f"🏷️ Section-based name: {section_name}")
+                    # Check if this email came from mailto with a valid name
+                    is_mailto_with_valid_name = False
+                    for mailto_email, mailto_name in mailto_results:
+                        if mailto_email.lower() == email.lower() and mailto_name and mailto_name != "unknown":
+                            final_name = mailto_name
+                            is_mailto_with_valid_name = True
+                            logging.info(f"🔍 Processing email: {email}")
+                            logging.info(f"📧 Using mailto name directly: {mailto_name}")
+                            break
 
-                    if section_name:
+                    if is_mailto_with_valid_name:
+                        # Skip all validation, use the mailto name
+                        pass
+                    else:
+                        # First, try to extract name from section (div with image and email)
+                        section_name = self.extract_name_from_section(soup, email)
+                        logging.info(f"🔍 Processing email: {email}")
+                        logging.info(f"📧 Original extracted name: {name}")
+                        logging.info(f"🏷️ Section-based name: {section_name}")
+
+                    if not is_mailto_with_valid_name and section_name:
                         # Found a name from section, validate it
                         username = email.split('@')[0] if '@' in email else email
                         logging.info(f"👤 Username from email: {username}")
 
                         # Section name is already formatted in extract_name_from_section
 
-                        if len(section_name) >= 2 and len(username) >= 2:
-                            section_last2 = section_name[-2:].lower()
-                            username_last2 = username[-2:].lower()
-                            section_first2 = section_name[:2].lower()
-                            username_first2 = username[:2].lower()
-
-                            logging.info(f"🔤 Section name last 2 chars: '{section_last2}' vs Username last 2 chars: '{username_last2}'")
-                            logging.info(f"🔤 Section name first 2 chars: '{section_first2}' vs Username first 2 chars: '{username_first2}'")
-
-                            # Check if either first 2 or last 2 characters match
-                            if section_last2 == username_last2 or section_first2 == username_first2:
-                                # At least one pair matches, use the section name
-                                final_name = section_name
-                                logging.info(f"✅ At least one character pair matches! Using section name: {final_name}")
-                            else:
-                                # Both first 2 and last 2 don't match, use email-based name generation
-                                final_name = self.generate_name_from_email(email)
-                                logging.info(f"❌ Both character pairs don't match! Generated name from email: {final_name}")
-                        else:
-                            # Use section name if we can't compare (too short)
+                        # Check if email contains first name or last name
+                        name_match = self.check_name_in_email(section_name, email)
+                        if name_match:
                             final_name = section_name
-                            logging.info(f"⚠️ Can't compare (too short). Using section name: {final_name}")
+                            logging.info(f"✅ Name match found! Using section name: {final_name}")
+                        else:
+                            # Both first 2 and last 2 don't match, use email-based name generation
+                            final_name = self.generate_name_from_email(email)
+                            logging.info(f"❌ No name match! Generated name from email: {final_name}")
 
-                    elif not name or name == "unknown":
+                    elif not is_mailto_with_valid_name and (not name or name == "unknown"):
                         # No section name and no original name found, generate from email
                         final_name = self.generate_name_from_email(email)
                         logging.info(f"🔧 No section/original name found. Generated from email: {final_name}")
 
-                    else:
+                    elif not is_mailto_with_valid_name:
                         # Have an original name but no section name, validate original name
                         username = email.split('@')[0] if '@' in email else email
                         logging.info(f"👤 Username from email: {username}")
@@ -671,27 +683,16 @@ class UniversityEmailScraper:
                         # Apply comma formatting to original name after finding it
                         formatted_original_name = self.format_comma_name(name)
 
-                        if len(formatted_original_name) >= 2 and len(username) >= 2:
-                            name_last2 = formatted_original_name[-2:].lower()
-                            username_last2 = username[-2:].lower()
-                            name_first2 = formatted_original_name[:2].lower()
-                            username_first2 = username[:2].lower()
-
-                            logging.info(f"🔤 Original name last 2 chars: '{name_last2}' vs Username last 2 chars: '{username_last2}'")
-                            logging.info(f"🔤 Original name first 2 chars: '{name_first2}' vs Username first 2 chars: '{username_first2}'")
-
-                            # Check if either first 2 or last 2 characters match
-                            if name_last2 == username_last2 or name_first2 == username_first2:
-                                # At least one pair matches, use the original name
-                                final_name = formatted_original_name
-                                logging.info(f"✅ At least one character pair matches! Using original name: {final_name}")
-                            else:
-                                # Both first 2 and last 2 don't match, use email-based name generation
-                                final_name = self.generate_name_from_email(email)
-                                logging.info(f"❌ Both character pairs don't match! Generated name from email: {final_name}")
-                        else:
+                        # Check if email contains first name or last name
+                        name_match = self.check_name_in_email(formatted_original_name, email)
+                        if name_match:
+                            # At least one pair matches, use the original name
                             final_name = formatted_original_name
-                            logging.info(f"⚠️ Can't compare (too short). Using original name: {final_name}")
+                            logging.info(f"✅ Name match found! Using original name: {final_name}")
+                        else:
+                            # Both first 2 and last 2 don't match, use email-based name generation
+                            final_name = self.generate_name_from_email(email)
+                            logging.info(f"❌ No name match! Generated name from email: {final_name}")
 
                     logging.info(f"🎯 Final name decision for {email}: {final_name}")
                     logging.info("=" * 60)
