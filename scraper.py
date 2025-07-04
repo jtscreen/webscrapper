@@ -28,8 +28,9 @@ class UniversityEmailScraper:
             r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # First Last
             r'\b[A-Z][a-z]+\s+[A-Z]\.\s*[A-Z][a-z]+\b',  # First M. Last
             r'\b[A-Z]\.\s*[A-Z][a-z]+\b',  # F. Last
-            r'\bDr\.\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # Dr. First Last
-            r'\bProf\.\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # Prof. First Last
+            r'\b(Dr|Prof)\.?\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # Dr or Prof with optional period
+            r'\b[A-Z][a-z]+,\s[A-Z][a-z]+\s[A-Z]\.\b',  #Last, First M.
+            r'\b[A-Z][a-z]+,\s+[A-Z][a-z]\b'  #Last, First
         ]
 
     def decode_cloudflare_email(self, encoded_string: str) -> str:
