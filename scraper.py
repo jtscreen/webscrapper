@@ -108,53 +108,63 @@ class UniversityEmailScraper:
                     results.append((decoded_email, name or "unknown"))
         return results
 
-    def extract_name_from_section(self, soup: BeautifulSoup, email: str) -> Optional[str]:
-        """
-        Extract name from a section by finding the email first, then searching for h tags
-        in div containers, comparing last two characters.
-        """
-        try:
-            username = email.split('@')[0] if '@' in email else email
-            username_last2 = username[-2:].lower() if len(username) >= 2 else username.lower()
-            username_first2 = username[:2].lower() if len(username) >= 2 else username.lower()
-            email_elements = []
-            for element in soup.find_all(text=True):
-                if email.lower() in element.lower():
-                    email_elements.append(element.parent if element.parent else element)
-            for link in soup.find_all('a', href=True):
-                if email.lower() in link['href'].lower():
-                    email_elements.append(link)
-            for element in soup.find_all():
-                element_str = str(element)
-                if email.lower() in element_str.lower():
-                    email_elements.append(element)
-            for email_element in email_elements:
-                current_div = email_element
-                while current_div and (not hasattr(current_div, 'name') or current_div.name != 'div'):
-                    current_div = current_div.parent if hasattr(current_div, 'parent') else None
-                for _ in range(10):
-                    if not current_div or not hasattr(current_div, 'name') or current_div.name != 'div':
-                        break
-                    heading_tags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
-                    for tag in heading_tags:
-                        headings = current_div.find_all(tag) if hasattr(current_div, 'find_all') else []
-                        for heading in headings:
-                            heading_text = heading.get_text(strip=True)
-                            formatted_heading = self.format_comma_name(heading_text)
-                            if len(formatted_heading) >= 2:
-                                formatted_heading_last2 = formatted_heading[-2:].lower()
-                                formatted_heading_first2 = formatted_heading[:2].lower()
-                                if formatted_heading_last2 == username_last2:
-                                    return formatted_heading
-                                if formatted_heading_first2 == username_first2:
-                                    return formatted_heading
-                    parent = current_div.parent if hasattr(current_div, 'parent') else None
-                    while parent and (not hasattr(parent, 'name') or parent.name != 'div'):
-                        parent = parent.parent if hasattr(parent, 'parent') else None
-                    current_div = parent
-            return None
-        except Exception:
-            return None
+def extract_name_from_section(self, soup: BeautifulSoup, email: str) -> Optional[str]:
+    logging.info(f"Starting name extraction for email: {email}")
+    try:
+        username = email.split('@')[0] if '@' in email else email
+        username_last2 = username[-2:].lower() if len(username) >= 2 else username.lower()
+        username_first2 = username[:2].lower() if len(username) >= 2 else username.lower()
+        email_elements = []
+        for element in soup.find_all(text=True):
+            if email.lower() in element.lower():
+                logging.debug(f"Found email in text element: {element}")
+                email_elements.append(element.parent if element.parent else element)
+        for link in soup.find_all('a', href=True):
+            if email.lower() in link['href'].lower():
+                logging.debug(f"Found email in link href: {link}")
+                email_elements.append(link)
+        for element in soup.find_all():
+            element_str = str(element)
+            if email.lower() in element_str.lower():
+                logging.debug(f"Found email in element's string: {element}")
+                email_elements.append(element)
+        for email_element in email_elements:
+            current_div = email_element
+            depth = 0
+            while current_div and (not hasattr(current_div, 'name') or current_div.name != 'div'):
+                current_div = current_div.parent if hasattr(current_div, 'parent') else None
+                depth += 1
+                if depth > 10:
+                    logging.debug("Exceeded max parent search depth for div.")
+                    break
+            for _ in range(10):
+                if not current_div or not hasattr(current_div, 'name') or current_div.name != 'div':
+                    break
+                heading_tags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+                for tag in heading_tags:
+                    headings = current_div.find_all(tag) if hasattr(current_div, 'find_all') else []
+                    for heading in headings:
+                        heading_text = heading.get_text(strip=True)
+                        formatted_heading = self.format_comma_name(heading_text)
+                        logging.debug(f"Checking heading: {formatted_heading}")
+                        if len(formatted_heading) >= 2:
+                            formatted_heading_last2 = formatted_heading[-2:].lower()
+                            formatted_heading_first2 = formatted_heading[:2].lower()
+                            if formatted_heading_last2 == username_last2:
+                                logging.info(f"Matched last2: {formatted_heading}")
+                                return formatted_heading
+                            if formatted_heading_first2 == username_first2:
+                                logging.info(f"Matched first2: {formatted_heading}")
+                                return formatted_heading
+                parent = current_div.parent if hasattr(current_div, 'parent') else None
+                while parent and (not hasattr(parent, 'name') or parent.name != 'div'):
+                    parent = parent.parent if hasattr(parent, 'parent') else None
+                current_div = parent
+        logging.info(f"No name found for email: {email}")
+        return None
+    except Exception as e:
+        logging.error(f"Exception during name extraction for {email}: {e}")
+        return None
 
     def format_comma_name(self, name: str) -> str:
         """
