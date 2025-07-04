@@ -295,8 +295,9 @@ class UniversityEmailScraper:
             # Extract username from email (part before @)
             username = email.split('@')[0] if '@' in email else email
             username_last2 = username[-2:].lower() if len(username) >= 2 else username.lower()
+            username_first2 = username[:2].lower() if len(username) >= 2 else username.lower()
             
-            logging.debug(f"Searching for h tags for email: {email}, username: {username}, last2: {username_last2}")
+            logging.debug(f"Searching for h tags for email: {email}, username: {username}, last2: {username_last2}, first2: {username_first2}")
             
             # First, find all elements that contain the email address
             email_elements = []
@@ -349,23 +350,30 @@ class UniversityEmailScraper:
                                 
                                 logging.debug(f"Found {tag}: '{heading_text}', last2: '{heading_last2}' vs username last2: '{username_last2}'")
                                 
-                                # Compare last 2 characters
-                                if heading_last2 == username_last2:
-                                    logging.debug(f"✅ H tag last 2 chars match! Using: {heading_text}")
-                                    return heading_text
+                                # Format comma name right after finding h tag
+                                formatted_heading = self.format_comma_name(heading_text)
+                                logging.debug(f"📝 Formatted heading: '{heading_text}' -> '{formatted_heading}'")
                                 
-                                # Check first 2 characters
-                                if len(heading_text) >= 2 and len(username) >= 2:
-                                    heading_first2 = heading_text[:2].lower()
-                                    username_first2 = username[:2].lower()
-                                    logging.debug(f"🔤 Checking first 2 chars: '{heading_first2}' vs '{username_first2}'")
+                                # Now use formatted name for comparison
+                                if len(formatted_heading) >= 2:
+                                    formatted_heading_last2 = formatted_heading[-2:].lower()
+                                    formatted_heading_first2 = formatted_heading[:2].lower()
                                     
-                                    if heading_first2 == username_first2:
-                                        logging.debug(f"✅ H tag first 2 chars match! Using: {heading_text}")
-                                        return heading_text
+                                    logging.debug(f"🔤 Formatted heading last 2 chars: '{formatted_heading_last2}' vs username last2: '{username_last2}'")
+                                    logging.debug(f"🔤 Formatted heading first 2 chars: '{formatted_heading_first2}' vs username first2: '{username_first2}'")
+                                    
+                                    # Compare last 2 characters
+                                    if formatted_heading_last2 == username_last2:
+                                        logging.debug(f"✅ H tag last 2 chars match! Using: {formatted_heading}")
+                                        return formatted_heading
+                                    
+                                    # Check first 2 characters
+                                    if formatted_heading_first2 == username_first2:
+                                        logging.debug(f"✅ H tag first 2 chars match! Using: {formatted_heading}")
+                                        return formatted_heading
                                 
                                 # Both last 2 and first 2 don't match
-                                logging.debug(f"❌ Both first and last 2 chars don't match for: {heading_text}")
+                                logging.debug(f"❌ Both first and last 2 chars don't match for: {formatted_heading}")
                     
                     # If we found h tags but none matched, go to parent div
                     if h_tag_found:
@@ -387,10 +395,11 @@ class UniversityEmailScraper:
             logging.error(f"Error extracting name from section for {email}: {e}")
             return None
 
-    def format_name_with_comma(self, name: str) -> str:
+    def format_comma_name(self, name: str) -> str:
         """
-        Format a name that contains a comma by moving everything after the comma
-        to the front, handling spacing properly.
+        Format a name that contains a comma by splitting on comma 
+        and reformatting as "first last". Also adds spaces before 
+        capital letters (excluding the first character).
         
         Args:
             name: Name string that may contain a comma
@@ -398,26 +407,35 @@ class UniversityEmailScraper:
         Returns:
             Formatted name string
         """
-        if ',' not in name:
-            return name
+        # First handle comma formatting
+        if ',' in name:
+            try:
+                last, first = name.split(',', 1)  # Split only on first comma
+                formatted_name = f"{first.strip()} {last.strip()}"
+            except Exception:
+                # Fallback to original name if anything goes wrong
+                formatted_name = name
+        else:
+            formatted_name = name
+        
+        # Now check for capital letters (excluding the first) and add spaces before them
+        if len(formatted_name) > 1:
+            result = formatted_name[0]  # Start with first character
             
-        try:
-            # Split on comma
-            parts = name.split(',', 1)  # Split only on first comma
-            before_comma = parts[0].strip()
-            after_comma = parts[1].strip()
+            for i in range(1, len(formatted_name)):
+                char = formatted_name[i]
+                prev_char = formatted_name[i-1]
+                
+                # If current character is uppercase and previous character is not a space
+                if char.isupper() and prev_char != ' ':
+                    result += ' ' + char
+                else:
+                    result += char
             
-            # Add space after the characters we move to the front
-            result = after_comma + ' ' + before_comma
-            
-            # Check for double spaces and replace with single space
-            result = result.replace('  ', ' ')
-            
-            return result.strip()
-            
-        except Exception:
-            # Fallback to original name if anything goes wrong
-            return name
+            formatted_name = result
+        
+        print(formatted_name)
+        return formatted_name
 
     def generate_name_from_email(self, email: str) -> str:
         """
@@ -614,6 +632,8 @@ class UniversityEmailScraper:
                         username = email.split('@')[0] if '@' in email else email
                         logging.info(f"👤 Username from email: {username}")
                         
+                        # Section name is already formatted in extract_name_from_section
+                        
                         if len(section_name) >= 2 and len(username) >= 2:
                             section_last2 = section_name[-2:].lower()
                             username_last2 = username[-2:].lower()
@@ -647,10 +667,13 @@ class UniversityEmailScraper:
                         username = email.split('@')[0] if '@' in email else email
                         logging.info(f"👤 Username from email: {username}")
                         
-                        if len(name) >= 2 and len(username) >= 2:
-                            name_last2 = name[-2:].lower()
+                        # Apply comma formatting to original name after finding it
+                        formatted_original_name = self.format_comma_name(name)
+                        
+                        if len(formatted_original_name) >= 2 and len(username) >= 2:
+                            name_last2 = formatted_original_name[-2:].lower()
                             username_last2 = username[-2:].lower()
-                            name_first2 = name[:2].lower()
+                            name_first2 = formatted_original_name[:2].lower()
                             username_first2 = username[:2].lower()
                             
                             logging.info(f"🔤 Original name last 2 chars: '{name_last2}' vs Username last 2 chars: '{username_last2}'")
@@ -659,21 +682,15 @@ class UniversityEmailScraper:
                             # Check if either first 2 or last 2 characters match
                             if name_last2 == username_last2 or name_first2 == username_first2:
                                 # At least one pair matches, use the original name
-                                final_name = name
+                                final_name = formatted_original_name
                                 logging.info(f"✅ At least one character pair matches! Using original name: {final_name}")
                             else:
                                 # Both first 2 and last 2 don't match, use email-based name generation
                                 final_name = self.generate_name_from_email(email)
                                 logging.info(f"❌ Both character pairs don't match! Generated name from email: {final_name}")
                         else:
-                            final_name = name
+                            final_name = formatted_original_name
                             logging.info(f"⚠️ Can't compare (too short). Using original name: {final_name}")
-                    
-                    # Apply comma formatting to final name
-                    if ',' in final_name:
-                        formatted_name = self.format_name_with_comma(final_name)
-                        logging.info(f"📝 Comma formatting: '{final_name}' -> '{formatted_name}'")
-                        final_name = formatted_name
                     
                     logging.info(f"🎯 Final name decision for {email}: {final_name}")
                     logging.info("=" * 60)
