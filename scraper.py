@@ -29,8 +29,8 @@ class UniversityEmailScraper:
             r'\b[A-Z][a-z]+\s+[A-Z]\.\s*[A-Z][a-z]+\b',  # First M. Last
             r'\b[A-Z]\.\s*[A-Z][a-z]+\b',  # F. Last
             r'\b(Dr|Prof)\.?\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # Dr or Prof with optional period
-            r'\b[A-Z][a-z]+,\s[A-Z][a-z]+\s[A-Z]\.\b',  #Last, First M.
-            r'\b[A-Z][a-z]+,\s+[A-Z][a-z]\b'  #Last, First
+            r'\b[A-Z][a-z]+,\s[A-Z][a-z]+\s[A-Z]\.\b',  # Last, First M.
+            r'\b[A-Z][a-z]+,\s+[A-Z][a-z]\b'  # Last, First
         ]
 
     def decode_cloudflare_email(self, encoded_string: str) -> str:
@@ -131,7 +131,6 @@ class UniversityEmailScraper:
 
     def extract_name_from_section(self, soup: BeautifulSoup, email: str) -> Optional[str]:
         try:
-            username = email.split('@')[0] if '@' in email else email
             email_elements = []
             for element in soup.find_all(text=True):
                 if email.lower() in element.lower():
@@ -157,7 +156,6 @@ class UniversityEmailScraper:
                             heading_text = heading.get_text(strip=True)
                             if heading_text and len(heading_text) >= 2:
                                 formatted_heading = self.format_comma_name(heading_text)
-                                # LESS STRICT: always accept section name if found
                                 return formatted_heading
                     parent = current_div.parent if hasattr(current_div, 'parent') else None
                     while parent and (not hasattr(parent, 'name') or parent.name != 'div'):
@@ -222,7 +220,6 @@ class UniversityEmailScraper:
             for part in name_parts:
                 if not part:
                     continue
-                # Accept partials, initials, or if initial matches start of username
                 if part in username or username.startswith(part) or username.endswith(part) or (len(part) == 1 and part == username[0]):
                     return True
             return False
@@ -266,7 +263,6 @@ class UniversityEmailScraper:
                 if email_lower in seen_emails:
                     continue
                 seen_emails.add(email_lower)
-                # Always prefer section-based name if available
                 section_name = self.extract_name_from_section(soup, email)
                 if section_name:
                     final_name = section_name
@@ -282,3 +278,15 @@ class UniversityEmailScraper:
         except Exception as e:
             logging.error(f"Error scraping {url}: {str(e)}")
             raise
+
+# === Sample usage ===
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    url = "https://www.exampleuniversity.edu/faculty"
+    scraper = UniversityEmailScraper()
+    try:
+        results = scraper.scrape_university_emails(url)
+        for entry in results:
+            print(entry)
+    except Exception as e:
+        print(f"Failed to scrape: {e}")
